@@ -1,0 +1,167 @@
+{% extends "admin/base.html" %}
+
+{% block title %}API密钥管理{% endblock %}
+
+{% block content %}
+<div class="container">
+    {% if message %}
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endif %}
+    
+    {% if error %}
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        {{ error }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endif %}
+    
+    <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">🔑 API密钥列表</h5>
+            <a href="{{ url_for('admin.create_api_key') }}" class="btn btn-primary">
+                <i class="bi bi-plus-lg"></i> 创建新密钥
+            </a>
+        </div>
+        
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>名称</th>
+                            <th>密钥</th>
+                            <th>状态</th>
+                            <th>创建者</th>
+                            <th>创建时间</th>
+                            <th>过期时间</th>
+                            <th>使用限制</th>
+                            <th>总调用次数</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for key in api_keys %}
+                        <tr>
+                            <td>
+                                <a href="{{ url_for('admin.view_api_key', key_id=key.id) }}" class="text-decoration-none">
+                                    {{ key.name or '未命名' }}
+                                </a>
+                            </td>
+                            <td>
+                                <code class="user-select-all">{{ key.key }}</code>
+                            </td>
+                            <td>
+                                {% if key.status == 'active' %}
+                                    <span class="badge bg-success">活跃</span>
+                                {% elif key.status == 'disabled' %}
+                                    <span class="badge bg-danger">禁用</span>
+                                {% else %}
+                                    <span class="badge bg-warning">过期</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ key.creator.username }}</td>
+                            <td>{{ key.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                            <td>
+                                {% if key.expires_at %}
+                                    {{ key.expires_at.strftime('%Y-%m-%d') }}
+                                {% else %}
+                                    永不过期
+                                {% endif %}
+                            </td>
+                            <td>{{ key.daily_limit }}/天</td>
+                            <td>{{ key.total_calls }}</td>
+                            <td>
+                                <div class="btn-group">
+                                    <button type="button" 
+                                            class="btn btn-sm btn-outline-{{ 'danger' if key.status == 'active' else 'success' }}"
+                                            onclick="toggleApiKey({{ key.id }})">
+                                        {{ '禁用' if key.status == 'active' else '启用' }}
+                                    </button>
+                                    <button type="button" 
+                                            class="btn btn-sm btn-outline-danger"
+                                            onclick="deleteApiKey({{ key.id }})">
+                                        删除
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="9" class="text-center text-muted py-4">
+                                暂无API密钥
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card shadow-sm mt-4">
+        <div class="card-header">
+            <h5 class="mb-0">💡 说明</h5>
+        </div>
+        <div class="card-body">
+            <ul class="mb-0">
+                <li>API密钥用于验证API调用请求</li>
+                <li>每个密钥可以设置每日调用限制</li>
+                <li>可以随时禁用或删除密钥</li>
+                <li>建议定期更换密钥以确保安全</li>
+                <li>点击密钥名称可以查看详细的使用统计和调用日志</li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleApiKey(keyId) {
+    if (confirm('确定要切换此API密钥的状态吗？')) {
+        fetch(`/admin/api-keys/${keyId}/toggle`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                window.location.reload();
+            } else {
+                alert('操作失败：' + data.error);
+            }
+        })
+        .catch(error => {
+            alert('操作失败：' + error);
+        });
+    }
+}
+
+function deleteApiKey(keyId) {
+    if (confirm('确定要删除此API密钥吗？此操作不可恢复！')) {
+        fetch(`/admin/api-keys/${keyId}/delete`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                window.location.reload();
+            } else {
+                alert('删除失败：' + data.error);
+            }
+        })
+        .catch(error => {
+            alert('删除失败：' + error);
+        });
+    }
+}
+</script>
+{% endblock %}

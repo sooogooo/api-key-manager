@@ -1,0 +1,222 @@
+{% extends "admin/base.html" %}
+
+{% block title %}系统日志{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">📝 系统日志</h5>
+            <div class="d-flex gap-2">
+                <!-- 日志级别过滤 -->
+                <select class="form-select form-select-sm" id="levelFilter" onchange="updateFilters()">
+                    <option value="all" {{ 'selected' if level == 'all' }}>所有级别</option>
+                    <option value="INFO" {{ 'selected' if level == 'INFO' }}>信息</option>
+                    <option value="WARNING" {{ 'selected' if level == 'WARNING' }}>警告</option>
+                    <option value="ERROR" {{ 'selected' if level == 'ERROR' }}>错误</option>
+                </select>
+                
+                <!-- 来源过滤 -->
+                <select class="form-select form-select-sm" id="sourceFilter" onchange="updateFilters()">
+                    <option value="all" {{ 'selected' if source == 'all' }}>所有来源</option>
+                    {% for src in sources %}
+                    <option value="{{ src }}" {{ 'selected' if source == src }}>{{ src }}</option>
+                    {% endfor %}
+                </select>
+                
+                <!-- 刷新按钮 -->
+                <button class="btn btn-sm btn-outline-primary" onclick="refreshLogs()">
+                    <i class="bi bi-arrow-clockwise"></i> 刷新
+                </button>
+            </div>
+        </div>
+        
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th style="width: 180px;">时间</th>
+                            <th style="width: 100px;">级别</th>
+                            <th style="width: 150px;">来源</th>
+                            <th>消息</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in logs %}
+                        <tr>
+                            <td>{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                            <td>
+                                {% if log.level == 'ERROR' %}
+                                    <span class="badge bg-danger">错误</span>
+                                {% elif log.level == 'WARNING' %}
+                                    <span class="badge bg-warning text-dark">警告</span>
+                                {% else %}
+                                    <span class="badge bg-info">信息</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge bg-secondary">{{ log.source or '未知' }}</span>
+                            </td>
+                            <td>
+                                {% if log.level == 'ERROR' %}
+                                    <span class="text-danger">{{ log.message }}</span>
+                                {% elif log.level == 'WARNING' %}
+                                    <span class="text-warning">{{ log.message }}</span>
+                                {% else %}
+                                    {{ log.message }}
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4" class="text-center text-muted py-4">
+                                暂无日志记录
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- 分页 -->
+            {% if pagination and pagination.pages > 1 %}
+            <nav aria-label="日志分页" class="mt-4">
+                <ul class="pagination justify-content-center">
+                    <!-- 首页 -->
+                    <li class="page-item {{ 'disabled' if pagination.page == 1 }}">
+                        <a class="page-link" href="{{ url_for('admin.view_logs', page=1, level=level, source=source) }}">
+                            <i class="bi bi-chevron-double-left"></i>
+                        </a>
+                    </li>
+                    
+                    <!-- 上一页 -->
+                    <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
+                        <a class="page-link" href="{{ url_for('admin.view_logs', page=pagination.prev_num, level=level, source=source) }}">
+                            <i class="bi bi-chevron-left"></i>
+                        </a>
+                    </li>
+                    
+                    <!-- 页码 -->
+                    {% for page in pagination.iter_pages(left_edge=2, left_current=2, right_current=3, right_edge=2) %}
+                        {% if page %}
+                            <li class="page-item {{ 'active' if page == pagination.page }}">
+                                <a class="page-link" href="{{ url_for('admin.view_logs', page=page, level=level, source=source) }}">
+                                    {{ page }}
+                                </a>
+                            </li>
+                        {% else %}
+                            <li class="page-item disabled">
+                                <span class="page-link">...</span>
+                            </li>
+                        {% endif %}
+                    {% endfor %}
+                    
+                    <!-- 下一页 -->
+                    <li class="page-item {{ 'disabled' if not pagination.has_next }}">
+                        <a class="page-link" href="{{ url_for('admin.view_logs', page=pagination.next_num, level=level, source=source) }}">
+                            <i class="bi bi-chevron-right"></i>
+                        </a>
+                    </li>
+                    
+                    <!-- 末页 -->
+                    <li class="page-item {{ 'disabled' if pagination.page == pagination.pages }}">
+                        <a class="page-link" href="{{ url_for('admin.view_logs', page=pagination.pages, level=level, source=source) }}">
+                            <i class="bi bi-chevron-double-right"></i>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- 日志说明 -->
+    <div class="card shadow-sm mt-4">
+        <div class="card-header">
+            <h5 class="mb-0">💡 说明</h5>
+        </div>
+        <div class="card-body">
+            <h6>日志级别说明：</h6>
+            <ul>
+                <li><span class="badge bg-info">信息</span> - 正常的系统操作记录</li>
+                <li><span class="badge bg-warning text-dark">警告</span> - 需要注意但不影响系统运行的问题</li>
+                <li><span class="badge bg-danger">错误</span> - 系统错误或异常情况</li>
+            </ul>
+            
+            <h6 class="mt-3">常见日志来源：</h6>
+            <ul>
+                <li><strong>api_key_manager</strong> - API密钥管理相关操作</li>
+                <li><strong>auth</strong> - 用户认证相关操作</li>
+                <li><strong>rate_limit</strong> - 访问频率限制相关</li>
+                <li><strong>proxy</strong> - API代理转发相关</li>
+                <li><strong>system</strong> - 系统运行状态相关</li>
+            </ul>
+            
+            <div class="alert alert-info mt-3">
+                <i class="bi bi-info-circle-fill"></i> 提示：
+                <ul class="mb-0">
+                    <li>使用顶部的过滤器可以快速找到特定类型的日志</li>
+                    <li>日志默认按时间倒序排列，最新的记录显示在最前面</li>
+                    <li>每页显示50条记录，可以使用分页导航查看更多</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function updateFilters() {
+    const level = document.getElementById('levelFilter').value;
+    const source = document.getElementById('sourceFilter').value;
+    window.location.href = "{{ url_for('admin.view_logs') }}" + 
+        `?level=${level}&source=${source}`;
+}
+
+function refreshLogs() {
+    window.location.reload();
+}
+
+// 自动刷新（每60秒）
+let autoRefresh = false;
+let refreshInterval;
+
+function toggleAutoRefresh() {
+    autoRefresh = !autoRefresh;
+    const btn = document.getElementById('autoRefreshBtn');
+    
+    if (autoRefresh) {
+        refreshInterval = setInterval(refreshLogs, 60000);
+        btn.classList.remove('btn-outline-secondary');
+        btn.classList.add('btn-secondary');
+        btn.innerHTML = '<i class="bi bi-pause-fill"></i> 停止自动刷新';
+    } else {
+        clearInterval(refreshInterval);
+        btn.classList.remove('btn-secondary');
+        btn.classList.add('btn-outline-secondary');
+        btn.innerHTML = '<i class="bi bi-play-fill"></i> 自动刷新';
+    }
+}
+
+// 错误消息展开/收起
+document.querySelectorAll('.log-message').forEach(message => {
+    if (message.scrollHeight > message.clientHeight) {
+        const expandBtn = document.createElement('button');
+        expandBtn.className = 'btn btn-sm btn-link';
+        expandBtn.textContent = '展开';
+        expandBtn.onclick = () => {
+            if (message.style.maxHeight) {
+                message.style.maxHeight = null;
+                expandBtn.textContent = '展开';
+            } else {
+                message.style.maxHeight = 'none';
+                expandBtn.textContent = '收起';
+            }
+        };
+        message.parentNode.appendChild(expandBtn);
+    }
+});
+</script>
+{% endblock %}

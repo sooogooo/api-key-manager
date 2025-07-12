@@ -1,0 +1,292 @@
+{% extends "admin/base.html" %}
+
+{% block title %}API使用统计{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="card shadow-sm mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">📊 API使用统计</h5>
+            <div class="btn-group">
+                <a href="{{ url_for('admin.view_stats', provider='all', days=days) }}" 
+                   class="btn btn-sm btn-{{ 'primary' if provider == 'all' else 'outline-primary' }}">
+                    所有提供商
+                </a>
+                <a href="{{ url_for('admin.view_stats', provider='openai', days=days) }}" 
+                   class="btn btn-sm btn-{{ 'primary' if provider == 'openai' else 'outline-primary' }}">
+                    OpenAI
+                </a>
+                <a href="{{ url_for('admin.view_stats', provider='anthropic', days=days) }}" 
+                   class="btn btn-sm btn-{{ 'primary' if provider == 'anthropic' else 'outline-primary' }}">
+                    Anthropic
+                </a>
+                <a href="{{ url_for('admin.view_stats', provider='google', days=days) }}" 
+                   class="btn btn-sm btn-{{ 'primary' if provider == 'google' else 'outline-primary' }}">
+                    Google
+                </a>
+            </div>
+        </div>
+        
+        <div class="card-body">
+            <div class="row mb-4">
+                <div class="col-md-12">
+                    <div class="btn-group float-end">
+                        <a href="{{ url_for('admin.view_stats', provider=provider, days=7) }}" 
+                           class="btn btn-sm btn-{{ 'secondary' if days == 7 else 'outline-secondary' }}">
+                            最近7天
+                        </a>
+                        <a href="{{ url_for('admin.view_stats', provider=provider, days=30) }}" 
+                           class="btn btn-sm btn-{{ 'secondary' if days == 30 else 'outline-secondary' }}">
+                            最近30天
+                        </a>
+                        <a href="{{ url_for('admin.view_stats', provider=provider, days=90) }}" 
+                           class="btn btn-sm btn-{{ 'secondary' if days == 90 else 'outline-secondary' }}">
+                            最近90天
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 总体统计卡片 -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="card bg-light">
+                        <div class="card-body text-center">
+                            <h6 class="card-title">总调用次数</h6>
+                            <h3 class="mb-0" id="totalCalls">0</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-light">
+                        <div class="card-body text-center">
+                            <h6 class="card-title">成功调用次数</h6>
+                            <h3 class="mb-0" id="successCalls">0</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-light">
+                        <div class="card-body text-center">
+                            <h6 class="card-title">成功率</h6>
+                            <h3 class="mb-0" id="successRate">0%</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-light">
+                        <div class="card-body text-center">
+                            <h6 class="card-title">平均响应时间</h6>
+                            <h3 class="mb-0" id="avgLatency">0ms</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 使用趋势图 -->
+            <div class="row mb-4">
+                <div class="col-md-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0">使用趋势</h6>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="usageChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 提供商分布和成功率 -->
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0">提供商分布</h6>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="providerChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0">成功率分布</h6>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="successRateChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 详细数据表格 -->
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">详细数据</h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>日期</th>
+                                    <th>提供商</th>
+                                    <th>总调用次数</th>
+                                    <th>成功调用次数</th>
+                                    <th>成功率</th>
+                                    <th>平均响应时间</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for stat in stats %}
+                                <tr>
+                                    <td>{{ stat.date }}</td>
+                                    <td>{{ stat.provider }}</td>
+                                    <td>{{ stat.total_calls }}</td>
+                                    <td>{{ stat.success_calls }}</td>
+                                    <td>
+                                        {% if stat.total_calls > 0 %}
+                                            {{ "%.2f"|format(stat.success_calls / stat.total_calls * 100) }}%
+                                        {% else %}
+                                            0%
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ "%.2f"|format(stat.avg_latency) }}s</td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted py-4">
+                                        暂无统计数据
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// 准备数据
+const stats = {{ stats|tojson|safe }};
+const dates = [...new Set(stats.map(s => s.date))].sort();
+const providers = [...new Set(stats.map(s => s.provider))];
+
+// 计算总体统计数据
+const totalCalls = stats.reduce((sum, s) => sum + s.total_calls, 0);
+const successCalls = stats.reduce((sum, s) => sum + s.success_calls, 0);
+const successRate = totalCalls > 0 ? (successCalls / totalCalls * 100).toFixed(2) : 0;
+const avgLatency = stats.length > 0 ? 
+    (stats.reduce((sum, s) => sum + s.avg_latency, 0) / stats.length).toFixed(2) : 0;
+
+// 更新统计卡片
+document.getElementById('totalCalls').textContent = totalCalls;
+document.getElementById('successCalls').textContent = successCalls;
+document.getElementById('successRate').textContent = successRate + '%';
+document.getElementById('avgLatency').textContent = avgLatency + 's';
+
+// 使用趋势图
+const usageData = {};
+providers.forEach(provider => {
+    usageData[provider] = dates.map(date => {
+        const stat = stats.find(s => s.date === date && s.provider === provider);
+        return stat ? stat.total_calls : 0;
+    });
+});
+
+const usageDatasets = providers.map((provider, index) => {
+    const colors = [
+        'rgb(255, 99, 132)',
+        'rgb(54, 162, 235)',
+        'rgb(255, 205, 86)',
+        'rgb(75, 192, 192)'
+    ];
+    
+    return {
+        label: provider,
+        data: usageData[provider],
+        borderColor: colors[index % colors.length],
+        tension: 0.1
+    };
+});
+
+new Chart(document.getElementById('usageChart'), {
+    type: 'line',
+    data: {
+        labels: dates,
+        datasets: usageDatasets
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            title: {
+                display: true,
+                text: `最近${dates.length}天使用趋势`
+            }
+        }
+    }
+});
+
+// 提供商分布图
+const providerTotals = providers.map(provider => 
+    stats.reduce((sum, s) => sum + (s.provider === provider ? s.total_calls : 0), 0)
+);
+
+new Chart(document.getElementById('providerChart'), {
+    type: 'doughnut',
+    data: {
+        labels: providers,
+        datasets: [{
+            data: providerTotals,
+            backgroundColor: [
+                'rgb(255, 99, 132)',
+                'rgb(54, 162, 235)',
+                'rgb(255, 205, 86)',
+                'rgb(75, 192, 192)'
+            ]
+        }]
+    }
+});
+
+// 成功率图
+const providerSuccess = providers.map(provider => {
+    const providerStats = stats.filter(s => s.provider === provider);
+    const total = providerStats.reduce((sum, s) => sum + s.total_calls, 0);
+    const success = providerStats.reduce((sum, s) => sum + s.success_calls, 0);
+    return total > 0 ? (success / total * 100).toFixed(2) : 0;
+});
+
+new Chart(document.getElementById('successRateChart'), {
+    type: 'bar',
+    data: {
+        labels: providers,
+        datasets: [{
+            label: '成功率 (%)',
+            data: providerSuccess,
+            backgroundColor: [
+                'rgba(75, 192, 192, 0.6)',
+                'rgba(75, 192, 192, 0.6)',
+                'rgba(75, 192, 192, 0.6)',
+                'rgba(75, 192, 192, 0.6)'
+            ]
+        }]
+    },
+    options: {
+        scales: {
+            y: {
+                beginAtZero: true,
+                max: 100
+            }
+        }
+    }
+});
+</script>
+{% endblock %}

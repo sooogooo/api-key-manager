@@ -1,0 +1,355 @@
+{% extends "admin/base.html" %}
+
+{% block title %}API密钥详情{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <!-- 密钥基本信息 -->
+        <div class="col-md-12 mb-4">
+            <div class="card shadow-sm">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">🔑 密钥详情</h5>
+                    <div class="btn-group">
+                        <button type="button" 
+                                class="btn btn-{{ 'danger' if key.status == 'active' else 'success' }}"
+                                onclick="toggleApiKey({{ key.id }})">
+                            {{ '禁用' if key.status == 'active' else '启用' }}
+                        </button>
+                        <button type="button" 
+                                class="btn btn-outline-danger"
+                                onclick="deleteApiKey({{ key.id }})">
+                            删除
+                        </button>
+                        <a href="{{ url_for('admin.list_api_keys') }}" class="btn btn-outline-secondary">
+                            返回列表
+                        </a>
+                    </div>
+                </div>
+                
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <table class="table table-sm">
+                                <tr>
+                                    <th style="width: 150px;">名称：</th>
+                                    <td>{{ key.name or '未命名' }}</td>
+                                </tr>
+                                <tr>
+                                    <th>密钥值：</th>
+                                    <td>
+                                        <code class="user-select-all">{{ key.key }}</code>
+                                        <button class="btn btn-sm btn-outline-secondary ms-2" 
+                                                onclick="copyToClipboard('{{ key.key }}')">
+                                            复制
+                                        </button>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th>状态：</th>
+                                    <td>
+                                        {% if key.status == 'active' %}
+                                            <span class="badge bg-success">活跃</span>
+                                        {% elif key.status == 'disabled' %}
+                                            <span class="badge bg-danger">禁用</span>
+                                        {% else %}
+                                            <span class="badge bg-warning">过期</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <table class="table table-sm">
+                                <tr>
+                                    <th style="width: 150px;">创建者：</th>
+                                    <td>{{ key.creator.username }}</td>
+                                </tr>
+                                <tr>
+                                    <th>创建时间：</th>
+                                    <td>{{ key.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                                </tr>
+                                <tr>
+                                    <th>过期时间：</th>
+                                    <td>
+                                        {% if key.expires_at %}
+                                            {{ key.expires_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                                            {% if key.is_expired %}
+                                                <span class="badge bg-danger">已过期</span>
+                                            {% endif %}
+                                        {% else %}
+                                            永不过期
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 使用统计 -->
+        <div class="col-md-12 mb-4">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h5 class="mb-0">📊 使用统计</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h6 class="card-title">总调用次数</h6>
+                                    <h3 class="mb-0">{{ key.total_calls }}</h3>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h6 class="card-title">今日调用次数</h6>
+                                    <h3 class="mb-0">{{ stats[0].total_calls if stats else 0 }}</h3>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h6 class="card-title">每日限制</h6>
+                                    <h3 class="mb-0">{{ key.daily_limit }}</h3>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h6 class="card-title">最后使用时间</h6>
+                                    <p class="mb-0">
+                                        {% if key.last_used_at %}
+                                            {{ key.last_used_at.strftime('%Y-%m-%d %H:%M') }}
+                                        {% else %}
+                                            从未使用
+                                        {% endif %}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 使用趋势图 -->
+                    <div class="mt-4">
+                        <canvas id="usageChart"></canvas>
+                    </div>
+                    
+                    <!-- 提供商使用分布 -->
+                    <div class="row mt-4">
+                        <div class="col-md-6">
+                            <h6>提供商使用分布</h6>
+                            <canvas id="providerChart"></canvas>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>调用成功率</h6>
+                            <canvas id="successRateChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 最近调用日志 -->
+        <div class="col-md-12">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h5 class="mb-0">📝 最近调用日志</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>时间</th>
+                                    <th>提供商</th>
+                                    <th>模型</th>
+                                    <th>客户端IP</th>
+                                    <th>请求路径</th>
+                                    <th>响应状态</th>
+                                    <th>响应时间</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for log in recent_logs %}
+                                <tr>
+                                    <td>{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                                    <td>{{ log.provider }}</td>
+                                    <td>{{ log.model }}</td>
+                                    <td>{{ log.client_ip }}</td>
+                                    <td>{{ log.request_path }}</td>
+                                    <td>
+                                        {% if log.success %}
+                                            <span class="badge bg-success">成功</span>
+                                        {% else %}
+                                            <span class="badge bg-danger" 
+                                                  data-bs-toggle="tooltip" 
+                                                  title="{{ log.error_message }}">
+                                                失败
+                                            </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ "%.2f"|format(log.response_time) }}s</td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted py-4">
+                                        暂无调用记录
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// 复制到剪贴板
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        alert('已复制到剪贴板');
+    }).catch(err => {
+        console.error('复制失败:', err);
+    });
+}
+
+// 切换API密钥状态
+function toggleApiKey(keyId) {
+    if (confirm('确定要切换此API密钥的状态吗？')) {
+        fetch(`/admin/api-keys/${keyId}/toggle`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                window.location.reload();
+            } else {
+                alert('操作失败：' + data.error);
+            }
+        })
+        .catch(error => {
+            alert('操作失败：' + error);
+        });
+    }
+}
+
+// 删除API密钥
+function deleteApiKey(keyId) {
+    if (confirm('确定要删除此API密钥吗？此操作不可恢复！')) {
+        fetch(`/admin/api-keys/${keyId}/delete`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                window.location.href = "{{ url_for('admin.list_api_keys') }}";
+            } else {
+                alert('删除失败：' + data.error);
+            }
+        })
+        .catch(error => {
+            alert('删除失败：' + error);
+        });
+    }
+}
+
+// 初始化工具提示
+var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+    return new bootstrap.Tooltip(tooltipTriggerEl)
+})
+
+// 准备图表数据
+const stats = {{ stats|tojson|safe }};
+const dates = stats.map(s => s.date);
+const totalCalls = stats.map(s => s.total_calls);
+const successCalls = stats.map(s => s.success_calls);
+
+// 使用趋势图
+new Chart(document.getElementById('usageChart'), {
+    type: 'line',
+    data: {
+        labels: dates,
+        datasets: [{
+            label: '总调用次数',
+            data: totalCalls,
+            borderColor: 'rgb(75, 192, 192)',
+            tension: 0.1
+        }, {
+            label: '成功调用次数',
+            data: successCalls,
+            borderColor: 'rgb(54, 162, 235)',
+            tension: 0.1
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            title: {
+                display: true,
+                text: '最近30天使用趋势'
+            }
+        }
+    }
+});
+
+// 提供商使用分布图
+const providers = ['openai', 'anthropic', 'google'];
+const providerCalls = providers.map(p => 
+    stats.reduce((sum, s) => sum + (s.provider === p ? s.total_calls : 0), 0)
+);
+
+new Chart(document.getElementById('providerChart'), {
+    type: 'doughnut',
+    data: {
+        labels: providers,
+        datasets: [{
+            data: providerCalls,
+            backgroundColor: [
+                'rgb(255, 99, 132)',
+                'rgb(54, 162, 235)',
+                'rgb(255, 205, 86)'
+            ]
+        }]
+    }
+});
+
+// 成功率图
+const totalSuccess = stats.reduce((sum, s) => sum + s.success_calls, 0);
+const totalFailure = stats.reduce((sum, s) => sum + (s.total_calls - s.success_calls), 0);
+
+new Chart(document.getElementById('successRateChart'), {
+    type: 'pie',
+    data: {
+        labels: ['成功', '失败'],
+        datasets: [{
+            data: [totalSuccess, totalFailure],
+            backgroundColor: [
+                'rgb(75, 192, 192)',
+                'rgb(255, 99, 132)'
+            ]
+        }]
+    }
+});
+</script>
+{% endblock %}
